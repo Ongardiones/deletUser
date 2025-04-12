@@ -1,10 +1,20 @@
 import { createClient } from '@supabase/supabase-js';
 
-const supabaseUrl = process.env.SUPABASE_URL; // Leer la URL desde las variables de entorno
-const serviceRoleKey = process.env.SERVICE_ROLE_KEY; // Leer la clave desde las variables de entorno
+const supabaseUrl = process.env.SUPABASE_URL;
+const serviceRoleKey = process.env.SERVICE_ROLE_KEY;
 const supabase = createClient(supabaseUrl, serviceRoleKey);
 
 export default async function deleteUser(req, res) {
+    // Configurar encabezados CORS
+    res.setHeader('Access-Control-Allow-Origin', '*'); // Permitir solicitudes desde cualquier origen
+    res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS'); // Métodos permitidos
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type'); // Encabezados permitidos
+
+    // Manejar solicitudes OPTIONS (preflight)
+    if (req.method === 'OPTIONS') {
+        return res.status(200).end();
+    }
+
     if (req.method !== 'POST') {
         return res.status(405).json({ error: 'Método no permitido' });
     }
