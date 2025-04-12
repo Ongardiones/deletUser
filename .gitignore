@@ -1,0 +1,12 @@
+# Ignorar node_modules
+node_modules/
+
+# Ignorar archivos de entorno
+.env
+
+# Ignorar archivos de logs
+*.log
+
+# Ignorar archivos de sistema (por ejemplo, macOS o Windows)
+.DS_Store
+Thumbs.db
