@@ -11,7 +11,7 @@ const app = express();
 
 // Configurar CORS
 app.use(cors({
-    origin: 'http://127.0.0.1:5500', // Permitir solicitudes desde este origen
+    origin: '*', // Permitir solicitudes desde cualquier origen
     methods: ['POST', 'OPTIONS'], // Métodos permitidos
     allowedHeaders: ['Content-Type'], // Encabezados permitidos
 }));
