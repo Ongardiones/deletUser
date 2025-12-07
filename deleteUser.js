@@ -72,17 +72,41 @@ export default async function deleteUser(req, res) {
         // PASO 3: Eliminar datos relacionados
         console.log('Paso 3: Eliminando datos relacionados...');
         
-        // Comentarios
-        await supabase.from('comments').delete().eq('user_id', userId);
-        console.log('✓ Comentarios eliminados');
+        // Comentarios (ignorar si no existen)
+        const { error: commentsError } = await supabase
+            .from('comments')
+            .delete()
+            .eq('user_id', userId);
+        
+        if (commentsError && commentsError.code !== 'PGRST116') {
+            console.warn('Advertencia al eliminar comentarios:', commentsError.message);
+        } else {
+            console.log('✓ Comentarios procesados');
+        }
 
-        // Trabajos
-        await supabase.from('jobs').delete().eq('user_id', userId);
-        console.log('✓ Trabajos eliminados');
+        // Trabajos (ignorar si no existen)
+        const { error: jobsError } = await supabase
+            .from('jobs')
+            .delete()
+            .eq('user_id', userId);
+        
+        if (jobsError && jobsError.code !== 'PGRST116') {
+            console.warn('Advertencia al eliminar trabajos:', jobsError.message);
+        } else {
+            console.log('✓ Trabajos procesados');
+        }
 
-        // Curriculum
-        await supabase.from('curriculums').delete().eq('user_id', userId);
-        console.log('✓ Curriculum eliminado');
+        // Curriculum (ignorar si no existe)
+        const { error: curriculumsError } = await supabase
+            .from('curriculums')
+            .delete()
+            .eq('user_id', userId);
+        
+        if (curriculumsError && curriculumsError.code !== 'PGRST116') {
+            console.warn('Advertencia al eliminar curriculum:', curriculumsError.message);
+        } else {
+            console.log('✓ Curriculum procesado');
+        }
 
         // PASO 4: Eliminar de la tabla users
         console.log('Paso 4: Eliminando de tabla users...');
@@ -91,10 +115,9 @@ export default async function deleteUser(req, res) {
             .delete()
             .eq('id', userId);
 
-        if (userError) {
-            console.error('ERROR al eliminar de users:', userError);
-            // No lanzar error, ya eliminamos de Auth que es lo importante
-            console.log('Continuando a pesar del error en users...');
+        if (userError && userError.code !== 'PGRST116') {
+            console.warn('Advertencia al eliminar de users:', userError.message);
+            console.log('Continuando... (Auth ya fue eliminado)');
         } else {
             console.log('✓ Usuario eliminado de tabla users');
         }
