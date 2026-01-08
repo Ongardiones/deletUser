@@ -123,7 +123,6 @@ app.post('/auth/forgot-password', async (req, res) => {
     res.json({ ok: true });
 });
 
-/* RESET CONTRASEÑA */
 app.post('/auth/reset-password', async (req, res) => {
     const { token, password } = req.body;
     if (!token || !password)
@@ -150,6 +149,44 @@ app.post('/auth/reset-password', async (req, res) => {
         .eq('id', reset.id);
 
     res.json({ ok: true });
+});
+
+/* LOGIN */
+app.post('/auth/login', async (req, res) => {
+    try {
+        const { email, password } = req.body;
+        if (!email || !password) {
+            return res.status(400).json({ ok: false, error: 'Faltan datos' });
+        }
+
+        const { data: user, error } = await supabase
+            .from('users')
+            .select('id, email, password_hash, perfil_completo')
+            .eq('email', email)
+            .single();
+
+        if (error || !user || !user.password_hash) {
+            return res.status(401).json({ ok: false, error: 'Credenciales inválidas' });
+        }
+
+        const match = await bcrypt.compare(password, user.password_hash);
+        if (!match) {
+            return res.status(401).json({ ok: false, error: 'Credenciales inválidas' });
+        }
+
+        return res.json({
+            ok: true,
+            user: {
+                id: user.id,
+                email: user.email,
+                perfil_completo: user.perfil_completo
+            }
+        });
+
+    } catch (err) {
+        console.error('Error en login:', err);
+        return res.status(500).json({ ok: false, error: 'Error interno' });
+    }
 });
 
 // Puerto del servidor
