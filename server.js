@@ -90,11 +90,9 @@ app.post('/auth/forgot-password', async (req, res) => {
 
     const link = `${process.env.FRONTEND_URL}/reset-password.html?token=${token}`;
 
-    await transporter.sendMail({
-        to: email,
-        subject: 'Recuperar contraseña',
-        html: `<a href="${link}">Restablecer contraseña</a>`
-    });
+
+    console.log('TOKEN GENERADO:', token);
+    console.log('LINK:', link);
 
     res.json({ ok: true });
 });
