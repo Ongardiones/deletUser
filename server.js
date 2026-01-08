@@ -1,9 +1,9 @@
+import fetch from 'node-fetch';
 import express from 'express';
 import deleteUser from './deleteUser.js';
 import dotenv from 'dotenv';
 import cors from 'cors'; // Importar el middleware de CORS
 import { createClient } from '@supabase/supabase-js';
-import nodemailer from 'nodemailer';
 
 // Cargar variables de entorno desde .env
 dotenv.config();
@@ -19,13 +19,32 @@ const supabase = createClient(
     }
 );
 
-const transporter = nodemailer.createTransport({
-    service: 'gmail',
-    auth: {
-        user: process.env.EMAIL_USER,
-        pass: process.env.EMAIL_PASS
+
+// Función para enviar mail con Brevo API
+async function sendBrevoEmail({ to, subject, html }) {
+    const response = await fetch('https://api.brevo.com/v3/smtp/email', {
+        method: 'POST',
+        headers: {
+            'accept': 'application/json',
+            'api-key': process.env.BREVO_API_KEY,
+            'content-type': 'application/json'
+        },
+        body: JSON.stringify({
+            sender: {
+                email: process.env.BREVO_SENDER,
+                name: 'Gremio'
+            },
+            to: [{ email: to }],
+            subject,
+            htmlContent: html
+        })
+    });
+
+    if (!response.ok) {
+        const error = await response.text();
+        throw new Error(error);
     }
-});
+}
 
 // Crear servidor
 const app = express();
@@ -71,13 +90,13 @@ app.post('/auth/forgot-password', async (req, res) => {
     const { email } = req.body;
     if (!email) return res.json({ ok: true });
 
-    const { data: user } = await supabase
+    const { data: user, error } = await supabase
         .from('users')
         .select('id')
         .eq('email', email)
         .single();
 
-    if (!user) return res.json({ ok: true });
+    if (error || !user) return res.json({ ok: true });
 
     const token = crypto.randomBytes(32).toString('hex');
     const expiresAt = new Date(Date.now() + 15 * 60 * 1000);
@@ -88,17 +107,18 @@ app.post('/auth/forgot-password', async (req, res) => {
         expires_at: expiresAt
     });
 
-    const link = `${process.env.FRONTEND_URL}/reset-password.html?token=${token}`;
+    const frontendUrl = process.env.FRONTEND_URL || 'https://tusitio.com';
+    const link = `${frontendUrl}/reset-password.html?token=${token}`;
 
 
 
-        transporter.sendMail({
-            to: email,
-            subject: 'Recuperar contraseña',
-            html: `<a href="${link}">Restablecer contraseña</a>`
-        }).catch(err => {
-            console.error('Error enviando mail:', err.message);
-        });
+                sendBrevoEmail({
+                    to: email,
+                    subject: 'Recuperar contraseña',
+                    html: `<a href="${link}">Restablecer contraseña</a>`
+                }).catch(err => {
+                    console.error('Error enviando mail con Brevo:', err.message);
+                });
 
     res.json({ ok: true });
 });
