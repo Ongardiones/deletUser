@@ -1,4 +1,4 @@
-import fetch from 'node-fetch';
+// ...existing code...
 import express from 'express';
 import deleteUser from './deleteUser.js';
 import dotenv from 'dotenv';
