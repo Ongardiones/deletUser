@@ -68,7 +68,7 @@ app.post('/postular', async (req, res) => {
             .insert([{
                 trabajador_id: user_id,
                 trabajo_id: job_id,
-                estado: 'pendiente'
+                estado: 'postulado'
             }]);
 
         if (error) {
