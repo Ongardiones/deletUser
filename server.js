@@ -1,3 +1,28 @@
+// POSTULARSE A UN TRABAJO
+app.post('/postular', async (req, res) => {
+    try {
+        const { user_id, job_id, ...rest } = req.body;
+        if (!user_id || !job_id) {
+            return res.status(400).json({ ok: false, error: 'Faltan datos requeridos' });
+        }
+
+        // Puedes agregar más validaciones aquí si lo deseas
+
+        const { error } = await supabase
+            .from('postulations')
+            .insert([{ user_id, job_id, ...rest }]);
+
+        if (error) {
+            console.error('Error insertando postulación:', error);
+            return res.status(500).json({ ok: false, error: 'Error al postularse', details: error.message });
+        }
+
+        return res.json({ ok: true });
+    } catch (err) {
+        console.error('Error en /postular:', err);
+        return res.status(500).json({ ok: false, error: 'Error interno del servidor' });
+    }
+});
 // ...existing code...
 import express from 'express';
 import deleteUser from './deleteUser.js';
