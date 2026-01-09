@@ -237,7 +237,7 @@ app.get('/perfil-completo/:id', async (req, res) => {
 
         const { data: user, error: errUser } = await supabase
             .from('users')
-            .select('id, email, role, perfil_completo, avatar_url, name, phone, provincia, localidad, direccion')
+            .select('id, email, role, perfil_completo, avatar_url, name, phone, provincia, localidad')
             .eq('id', id)
             .maybeSingle();
 
@@ -247,10 +247,14 @@ app.get('/perfil-completo/:id', async (req, res) => {
         }
         if (!user) return res.status(404).json({ ok: false, error: 'User no encontrado' });
 
+        // Traer currículum del usuario. Si hubiese más de uno, priorizar el activo y/o el más reciente.
         const { data: curriculum, error: errCv } = await supabase
             .from('curriculums')
             .select('*')
             .eq('user_id', id)
+            .order('is_active', { ascending: false })
+            .order('actualizado_en', { ascending: false })
+            .limit(1)
             .maybeSingle();
 
         if (errCv) {
@@ -311,7 +315,7 @@ app.get('/users/:id', async (req, res) => {
         const { id } = req.params;
         const { data: user, error } = await supabase
             .from('users')
-            .select('id, email, role, perfil_completo, avatar_url, name, phone, provincia, localidad, direccion')
+            .select('id, email, role, perfil_completo, avatar_url, name, phone, provincia, localidad')
             .eq('id', id)
             .single();
         if (error || !user) {
