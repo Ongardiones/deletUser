@@ -63,7 +63,7 @@ app.post('/postular', async (req, res) => {
         }
         // Puedes agregar más validaciones aquí si lo deseas
         const { error } = await supabase
-            .from('postulations')
+            .from('postulaciones')
             .insert([{ user_id, job_id, ...rest }]);
         if (error) {
             console.error('Error insertando postulación:', error);
