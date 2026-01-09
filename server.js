@@ -51,9 +51,9 @@ const app = express();
 
 // Configurar CORS
 app.use(cors({
-    origin: '*', // Permitir solicitudes desde cualquier origen
-    methods: ['POST', 'OPTIONS'], // Métodos permitidos
-    allowedHeaders: ['Content-Type'], // Encabezados permitidos
+    origin: '*',
+    methods: ['GET', 'POST', 'OPTIONS'],
+    allowedHeaders: ['Content-Type'],
 }));
 
 // Permite leer JSON en las solicitudes
@@ -190,6 +190,30 @@ app.post('/auth/login', async (req, res) => {
 });
 
 // Puerto del servidor
+
+/* OBTENER USUARIO POR ID */
+app.get('/users/:id', async (req, res) => {
+    try {
+        const { id } = req.params;
+
+        const { data: user, error } = await supabase
+            .from('users')
+            .select('id, email, role, perfil_completo, avatar_url')
+            .eq('id', id)
+            .single();
+
+        if (error || !user) {
+            return res.status(404).json({ ok: false });
+        }
+
+        return res.json({ ok: true, user });
+
+    } catch (err) {
+        console.error('Error obteniendo usuario:', err);
+        return res.status(500).json({ ok: false });
+    }
+});
+
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
         console.log(`Servidor escuchando en el puerto ${PORT}`);
