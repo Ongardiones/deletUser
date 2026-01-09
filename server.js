@@ -72,6 +72,12 @@ app.post('/postular', async (req, res) => {
             }]);
 
         if (error) {
+            if (error.code === '23505') {
+                return res.status(409).json({
+                    ok: false,
+                    error: 'Ya estás postulado a este trabajo'
+                });
+            }
             console.error('Error insertando postulación:', error);
             return res.status(500).json({ ok: false, error: 'Error al postularse' });
         }
