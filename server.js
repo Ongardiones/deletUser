@@ -174,6 +174,60 @@ app.post('/auth/reset-password', async (req, res) => {
     res.json({ ok: true });
 });
 
+// Mis trabajos (trabajador): devuelve jobs asociados por postulaciones
+// Nota: usa SERVICE_ROLE_KEY, por lo que no depende de RLS del cliente.
+app.get('/mis-trabajos/:userId', async (req, res) => {
+    try {
+        const { userId } = req.params;
+        if (!userId) return res.status(400).json({ ok: false, error: 'Falta userId' });
+
+        const { data: postulaciones, error: errPost } = await supabase
+            .from('postulaciones')
+            .select('trabajo_id, estado, created_at')
+            .eq('trabajador_id', userId)
+            .order('created_at', { ascending: false });
+
+        if (errPost) {
+            console.error('Error obteniendo postulaciones:', errPost);
+            return res.status(500).json({ ok: false, error: 'Error obteniendo postulaciones' });
+        }
+
+        const ids = Array.from(new Set((postulaciones || []).map(p => p.trabajo_id).filter(Boolean)));
+        if (ids.length === 0) {
+            return res.json({ ok: true, jobs: [] });
+        }
+
+        const { data: jobs, error: errJobs } = await supabase
+            .from('jobs')
+            .select('*, users(name, avatar_url)')
+            .in('id', ids);
+
+        if (errJobs) {
+            console.error('Error obteniendo jobs:', errJobs);
+            return res.status(500).json({ ok: false, error: 'Error obteniendo trabajos' });
+        }
+
+        const jobById = new Map((jobs || []).map(j => [String(j.id), j]));
+
+        const merged = (postulaciones || [])
+            .map(p => {
+                const job = jobById.get(String(p.trabajo_id));
+                if (!job) return null;
+                return {
+                    ...job,
+                    postulacion_estado: p.estado,
+                    postulacion_creada_at: p.created_at,
+                };
+            })
+            .filter(Boolean);
+
+        return res.json({ ok: true, jobs: merged });
+    } catch (err) {
+        console.error('Error en /mis-trabajos:', err);
+        return res.status(500).json({ ok: false, error: 'Error interno del servidor' });
+    }
+});
+
 app.get('/users/:id', async (req, res) => {
     try {
         const { id } = req.params;
