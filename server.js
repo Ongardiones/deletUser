@@ -57,19 +57,27 @@ async function sendBrevoEmail({ to, subject, html }) {
 // RUTAS
 app.post('/postular', async (req, res) => {
     try {
-        const { user_id, job_id, ...rest } = req.body;
+        const { user_id, job_id } = req.body;
+
         if (!user_id || !job_id) {
             return res.status(400).json({ ok: false, error: 'Faltan datos requeridos' });
         }
-        // Puedes agregar más validaciones aquí si lo deseas
+
         const { error } = await supabase
             .from('postulaciones')
-            .insert([{ user_id, job_id, ...rest }]);
+            .insert([{
+                trabajador_id: user_id,
+                trabajo_id: job_id,
+                estado: 'pendiente'
+            }]);
+
         if (error) {
             console.error('Error insertando postulación:', error);
-            return res.status(500).json({ ok: false, error: 'Error al postularse', details: error.message });
+            return res.status(500).json({ ok: false, error: 'Error al postularse' });
         }
+
         return res.json({ ok: true });
+
     } catch (err) {
         console.error('Error en /postular:', err);
         return res.status(500).json({ ok: false, error: 'Error interno del servidor' });
