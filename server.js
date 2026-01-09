@@ -228,12 +228,90 @@ app.get('/mis-trabajos/:userId', async (req, res) => {
     }
 });
 
+// Perfil completo (lectura): users + curriculums + experiencia + educacion + enlaces + testimonios
+// Nota: usa SERVICE_ROLE_KEY, por lo que NO depende de la sesión Supabase del navegador.
+app.get('/perfil-completo/:id', async (req, res) => {
+    try {
+        const { id } = req.params;
+        if (!id) return res.status(400).json({ ok: false, error: 'Falta id' });
+
+        const { data: user, error: errUser } = await supabase
+            .from('users')
+            .select('id, email, role, perfil_completo, avatar_url, name, phone, provincia, localidad, direccion')
+            .eq('id', id)
+            .maybeSingle();
+
+        if (errUser) {
+            console.error('Error leyendo users:', errUser);
+            return res.status(500).json({ ok: false, error: 'Error leyendo user' });
+        }
+        if (!user) return res.status(404).json({ ok: false, error: 'User no encontrado' });
+
+        const { data: curriculum, error: errCv } = await supabase
+            .from('curriculums')
+            .select('*')
+            .eq('user_id', id)
+            .maybeSingle();
+
+        if (errCv) {
+            console.error('Error leyendo curriculums:', errCv);
+            return res.status(500).json({ ok: false, error: 'Error leyendo currículum' });
+        }
+
+        let experiencia = [];
+        let educacion = [];
+        if (curriculum?.id) {
+            const { data: expRows, error: errExp } = await supabase
+                .from('experiencia_laboral')
+                .select('empresa, puesto, descripcion, inicio, fin')
+                .eq('curriculum_id', curriculum.id)
+                .order('inicio', { ascending: false });
+            if (errExp) console.error('Error leyendo experiencia_laboral:', errExp);
+            experiencia = expRows || [];
+
+            const { data: eduRows, error: errEdu } = await supabase
+                .from('educacion')
+                .select('institucion, titulo, descripcion, inicio, fin')
+                .eq('curriculum_id', curriculum.id)
+                .order('inicio', { ascending: false });
+            if (errEdu) console.error('Error leyendo educacion:', errEdu);
+            educacion = eduRows || [];
+        }
+
+        // Enlaces/testimonios: en el front se guardan con curriculum_id = userId
+        const { data: enlaces, error: errLinks } = await supabase
+            .from('enlaces_portfolio')
+            .select('tipo, url')
+            .eq('curriculum_id', id);
+        if (errLinks) console.error('Error leyendo enlaces_portfolio:', errLinks);
+
+        const { data: testimonios, error: errTest } = await supabase
+            .from('testimonios')
+            .select('autor, mensaje')
+            .eq('curriculum_id', id);
+        if (errTest) console.error('Error leyendo testimonios:', errTest);
+
+        return res.json({
+            ok: true,
+            user,
+            curriculum: curriculum || null,
+            experiencia: experiencia || [],
+            educacion: educacion || [],
+            enlaces: enlaces || [],
+            testimonios: testimonios || [],
+        });
+    } catch (err) {
+        console.error('Error en /perfil-completo:', err);
+        return res.status(500).json({ ok: false, error: 'Error interno del servidor' });
+    }
+});
+
 app.get('/users/:id', async (req, res) => {
     try {
         const { id } = req.params;
         const { data: user, error } = await supabase
             .from('users')
-            .select('id, email, role, perfil_completo, avatar_url')
+            .select('id, email, role, perfil_completo, avatar_url, name, phone, provincia, localidad, direccion')
             .eq('id', id)
             .single();
         if (error || !user) {
