@@ -31,28 +31,136 @@ const supabase = createClient(
 
 // Función para enviar mail con Brevo API
 async function sendBrevoEmail({ to, subject, html }) {
-    const response = await fetch('https://api.brevo.com/v3/smtp/email', {
-        method: 'POST',
-        headers: {
-            'accept': 'application/json',
-            'api-key': process.env.BREVO_API_KEY,
-            'content-type': 'application/json'
-        },
-        body: JSON.stringify({
-            sender: {
-                email: process.env.BREVO_SENDER,
-                name: 'Gremio'
+    const controller = new AbortController();
+    const timeoutMs = 10_000;
+    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+        const response = await fetch('https://api.brevo.com/v3/smtp/email', {
+            method: 'POST',
+            headers: {
+                'accept': 'application/json',
+                'api-key': process.env.BREVO_API_KEY,
+                'content-type': 'application/json'
             },
-            to: [{ email: to }],
-            subject,
-            htmlContent: html
-        })
-    });
-    if (!response.ok) {
-        const error = await response.text();
-        throw new Error(error);
+            body: JSON.stringify({
+                sender: {
+                    email: process.env.BREVO_SENDER,
+                    name: 'Gremio'
+                },
+                to: [{ email: to }],
+                subject,
+                htmlContent: html
+            }),
+            signal: controller.signal
+        });
+        if (!response.ok) {
+            const error = await response.text();
+            throw new Error(error);
+        }
+    } finally {
+        clearTimeout(timeoutId);
     }
 }
+
+// Verificación de correo (código por email) - en memoria
+const CODIGOS_VERIFICACION = {}; // email -> { codigo, timestamp }
+const EXPIRACION_CODIGO_MS = 5 * 60 * 1000;
+const COOLDOWN_ENVIO_MS = 60 * 1000;
+const ULTIMO_ENVIO = {}; // email -> timestamp
+
+function normalizarEmail(email) {
+    return String(email || '').trim().toLowerCase();
+}
+
+function secondsLeft(msLeft) {
+    return Math.max(0, Math.ceil(msLeft / 1000));
+}
+
+app.post('/enviar-codigo', async (req, res) => {
+    try {
+        const email = normalizarEmail(req.body?.email);
+        if (!email) return res.status(400).json({ ok: false, message: 'Falta el correo' });
+
+        const now = Date.now();
+        const last = ULTIMO_ENVIO[email] || 0;
+        const msSince = now - last;
+
+        if (msSince < COOLDOWN_ENVIO_MS) {
+            return res.status(429).json({
+                ok: false,
+                message: 'Esperá antes de reenviar el código.',
+                retryAfterSec: secondsLeft(COOLDOWN_ENVIO_MS - msSince),
+                expiresInSec: secondsLeft(EXPIRACION_CODIGO_MS)
+            });
+        }
+
+        const codigo = Math.floor(100000 + Math.random() * 900000).toString();
+        CODIGOS_VERIFICACION[email] = { codigo, timestamp: now };
+        // Bloquear reintentos inmediatos aunque falle el envío (evita spam accidental)
+        ULTIMO_ENVIO[email] = now;
+
+        try {
+            await sendBrevoEmail({
+                to: email,
+                subject: '✨ Verifica tu cuenta · Gremio',
+                html: `
+                  <div style="font-family: Arial, sans-serif;">
+                    <h2>Código de verificación</h2>
+                    <p>Tu código es:</p>
+                    <h1>${codigo}</h1>
+                    <p>Este código es válido por 5 minutos.</p>
+                  </div>
+                `
+            });
+
+            return res.json({
+                ok: true,
+                message: 'Código enviado',
+                expiresInSec: secondsLeft(EXPIRACION_CODIGO_MS),
+                resendInSec: secondsLeft(COOLDOWN_ENVIO_MS)
+            });
+        } catch (err) {
+            // Si no se pudo enviar, invalidar el código para evitar que quede activo sin correo.
+            delete CODIGOS_VERIFICACION[email];
+            console.error('Error enviando mail con Brevo:', err?.message || err);
+            return res.status(500).json({ ok: false, message: 'Error al enviar correo' });
+        }
+    } catch (err) {
+        console.error('Error en /enviar-codigo:', err);
+        return res.status(500).json({ ok: false, message: 'Error interno del servidor' });
+    }
+});
+
+app.post('/verificar-codigo', (req, res) => {
+    try {
+        const email = normalizarEmail(req.body?.email);
+        const codigoIngresado = String(req.body?.codigoIngresado || '').trim();
+
+        if (!email || !codigoIngresado) {
+            return res.status(400).json({ ok: false, message: 'Faltan datos' });
+        }
+
+        const registro = CODIGOS_VERIFICACION[email];
+        if (!registro) return res.status(401).json({ ok: false, message: 'Código incorrecto' });
+
+        const { codigo, timestamp } = registro;
+        const ahora = Date.now();
+        if (ahora - timestamp > EXPIRACION_CODIGO_MS) {
+            delete CODIGOS_VERIFICACION[email];
+            return res.status(401).json({ ok: false, message: 'Código expirado' });
+        }
+
+        if (codigo === codigoIngresado) {
+            delete CODIGOS_VERIFICACION[email];
+            return res.json({ ok: true, message: 'Código correcto' });
+        }
+
+        return res.status(401).json({ ok: false, message: 'Código incorrecto' });
+    } catch (err) {
+        console.error('Error en /verificar-codigo:', err);
+        return res.status(500).json({ ok: false, message: 'Error interno del servidor' });
+    }
+});
 
 // RUTAS
 app.post('/postular', async (req, res) => {
