@@ -171,6 +171,59 @@ app.post('/postular', async (req, res) => {
             return res.status(400).json({ ok: false, error: 'Faltan datos requeridos' });
         }
 
+        // Seguridad: este servidor usa SERVICE_ROLE_KEY (bypassea RLS), así que validamos acá.
+        // 1) No permitir que un empleador se postule.
+        // 2) No permitir postularse a tu propio trabajo.
+        // 3) Solo permitir postularse si el trabajo está ABIERTO.
+
+        const { data: userRow, error: userErr } = await supabase
+            .from('users')
+            .select('id, role')
+            .eq('id', user_id)
+            .maybeSingle();
+
+        if (userErr) {
+            console.error('Error obteniendo rol de usuario:', userErr);
+            return res.status(500).json({ ok: false, error: 'No se pudo validar el usuario' });
+        }
+
+        const role = String(userRow?.role || '').trim().toLowerCase();
+        if (role === 'empleador') {
+            return res.status(403).json({ ok: false, error: 'Un empleador no puede postularse a ofertas' });
+        }
+
+        const { data: jobRow, error: jobErr } = await supabase
+            .from('jobs')
+            .select('id, user_id, estado, trabajador_id')
+            .eq('id', job_id)
+            .maybeSingle();
+
+        if (jobErr) {
+            console.error('Error obteniendo trabajo:', jobErr);
+            return res.status(500).json({ ok: false, error: 'No se pudo validar el trabajo' });
+        }
+
+        if (!jobRow?.id) {
+            return res.status(404).json({ ok: false, error: 'Trabajo no encontrado' });
+        }
+
+        if (String(jobRow.user_id) === String(user_id)) {
+            return res.status(403).json({ ok: false, error: 'No podés postularte a tu propia oferta' });
+        }
+
+        const estadoNorm = String(jobRow?.estado || '')
+            .trim()
+            .toLowerCase()
+            .replace(/\s+/g, '_')
+            .replace(/-+/g, '_');
+        if (estadoNorm !== 'abierto') {
+            return res.status(409).json({ ok: false, error: 'Este trabajo ya no acepta postulaciones' });
+        }
+
+        if (jobRow?.trabajador_id) {
+            return res.status(409).json({ ok: false, error: 'No se puede postular: ya tiene un trabajador asignado' });
+        }
+
         const { error } = await supabase
             .from('postulaciones')
             .insert([{
@@ -264,6 +317,11 @@ app.post('/auth/reset-password', async (req, res) => {
     const { token, password } = req.body;
     if (!token || !password)
         return res.status(400).json({ ok: false });
+
+    if (String(password).length < 8) {
+        return res.status(400).json({ ok: false, error: 'La contraseña debe tener al menos 8 caracteres' });
+    }
+
     const { data: reset } = await supabase
         .from('password_resets')
         .select('*')
@@ -272,10 +330,32 @@ app.post('/auth/reset-password', async (req, res) => {
         .single();
     if (!reset || new Date(reset.expires_at) < new Date())
         return res.status(400).json({ ok: false });
-    const hash = await bcrypt.hash(password, 10);
-    await supabase.from('users')
-        .update({ password_hash: hash })
-        .eq('id', reset.user_id);
+
+    // 1) Actualizar password en Supabase Auth (el login del front usa supabase.auth.signInWithPassword)
+    try {
+        const { error: adminErr } = await supabase.auth.admin.updateUserById(reset.user_id, {
+            password: String(password),
+        });
+        if (adminErr) {
+            console.error('Error actualizando password en Supabase Auth:', adminErr);
+            return res.status(500).json({ ok: false, error: 'No se pudo actualizar la contraseña (auth)' });
+        }
+    } catch (err) {
+        console.error('Error actualizando password en Supabase Auth:', err);
+        return res.status(500).json({ ok: false, error: 'No se pudo actualizar la contraseña (auth)' });
+    }
+
+    // 2) Mantener compatibilidad: actualizar también el hash en la tabla users (si se usa en algún flujo legacy)
+    try {
+        const hash = await bcrypt.hash(String(password), 10);
+        await supabase.from('users')
+            .update({ password_hash: hash })
+            .eq('id', reset.user_id);
+    } catch (err) {
+        console.error('Error actualizando password_hash en users:', err);
+        // No bloqueamos el reset si Auth ya quedó actualizado.
+    }
+
     await supabase.from('password_resets')
         .update({ used: true })
         .eq('id', reset.id);
