@@ -10,6 +10,34 @@ import bcrypt from 'bcrypt';
 
 dotenv.config();
 
+// Logo para emails
+// - Recomendado: usar una URL pública ABSOLUTA (CDN/Supabase Storage) en PUBLIC_LOGO_URL
+// - Alternativa: usar PUBLIC_BASE_URL o FRONTEND_URL y que el sitio sirva /assets/img/favicon3.png
+const PUBLIC_BASE_URL = String(process.env.PUBLIC_BASE_URL || process.env.FRONTEND_URL || '').replace(/\/+$/, '');
+const PUBLIC_LOGO_URL = String(process.env.PUBLIC_LOGO_URL || '').trim();
+const LOGO_URL = PUBLIC_LOGO_URL || (PUBLIC_BASE_URL ? `${PUBLIC_BASE_URL}/assets/img/favicon3.png` : '');
+
+function wrapEmailHtml({ title, innerHtml }) {
+        return `
+            <div style="margin:0;padding:0;background:#f6f7fb;">
+                <div style="max-width:520px;margin:0 auto;padding:24px;">
+                    <div style="background:#ffffff;border:1px solid #e7e9f0;border-radius:14px;padding:22px;font-family:Arial, sans-serif;">
+                        ${LOGO_URL ? `
+                            <div style="text-align:center;margin-bottom:14px;">
+                                <img src="${LOGO_URL}" width="56" height="56" alt="GREMIO" style="display:inline-block;border-radius:12px;" />
+                            </div>
+                        ` : ''}
+
+                        <h2 style="margin:0 0 10px 0;color:#111827;font-size:20px;">${title}</h2>
+                        ${innerHtml}
+
+                        <p style="margin:18px 0 0 0;color:#6b7280;font-size:12px;line-height:1.4;">Si no solicitaste este correo, podés ignorarlo.</p>
+                    </div>
+                </div>
+            </div>
+        `;
+}
+
 // crear app PRIMERO
 const app = express();
 
@@ -103,14 +131,20 @@ app.post('/enviar-codigo', async (req, res) => {
             await sendBrevoEmail({
                 to: email,
                 subject: '✨ Verifica tu cuenta · Gremio',
-                html: `
-                  <div style="font-family: Arial, sans-serif;">
-                    <h2>Código de verificación</h2>
-                    <p>Tu código es:</p>
-                    <h1>${codigo}</h1>
-                    <p>Este código es válido por 5 minutos.</p>
-                  </div>
-                `
+                                html: wrapEmailHtml({
+                                        title: 'Código de verificación',
+                                        innerHtml: `
+                                            <p style="margin:0 0 14px 0;color:#374151;font-size:14px;line-height:1.4;">Usá este código para verificar tu cuenta:</p>
+
+                                            <div style="text-align:center;margin:18px 0 18px 0;">
+                                                <div style="display:inline-block;padding:14px 18px;border-radius:12px;border:1px dashed #c7cbe0;background:#f8fafc;">
+                                                    <div style="letter-spacing:6px;font-weight:700;font-size:28px;color:#111827;">${codigo}</div>
+                                                </div>
+                                            </div>
+
+                                            <p style="margin:0;color:#6b7280;font-size:13px;">Este código vence en 5 minutos.</p>
+                                        `
+                                })
             });
 
             return res.json({
@@ -306,7 +340,20 @@ app.post('/auth/forgot-password', async (req, res) => {
     sendBrevoEmail({
         to: email,
         subject: 'Recuperar contraseña',
-        html: `<a href="${link}">Restablecer contraseña</a>`
+                html: wrapEmailHtml({
+                        title: 'Recuperar contraseña',
+                        innerHtml: `
+                            <p style="margin:0 0 14px 0;color:#374151;font-size:14px;line-height:1.4;">Recibimos un pedido para restablecer tu contraseña.</p>
+                            <p style="margin:0 0 18px 0;color:#374151;font-size:14px;line-height:1.4;">Hacé clic en el botón para continuar (el enlace vence en 15 minutos):</p>
+
+                            <div style="text-align:center;margin:18px 0 18px 0;">
+                                <a href="${link}" style="display:inline-block;background:#2563eb;color:#ffffff;text-decoration:none;padding:12px 18px;border-radius:10px;font-weight:700;">Restablecer contraseña</a>
+                            </div>
+
+                            <p style="margin:0;color:#6b7280;font-size:12px;line-height:1.4;">Si el botón no funciona, copiá y pegá este enlace en tu navegador:</p>
+                            <p style="margin:8px 0 0 0;color:#111827;font-size:12px;word-break:break-all;">${link}</p>
+                        `
+                })
     }).catch(err => {
         console.error('Error enviando mail con Brevo:', err.message);
     });
