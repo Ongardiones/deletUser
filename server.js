@@ -159,6 +159,8 @@ app.post('/enviar-codigo', async (req, res) => {
         } catch (err) {
             // Si no se pudo enviar, invalidar el código para evitar que quede activo sin correo.
             delete CODIGOS_VERIFICACION[email];
+            // Si no se envió, permitir reintento inmediato (no aplicar cooldown falso)
+            delete ULTIMO_ENVIO[email];
             console.error('Error enviando mail con Brevo:', err?.message || err);
             return res.status(500).json({ ok: false, message: 'Error al enviar correo' });
         }
