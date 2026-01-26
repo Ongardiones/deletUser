@@ -59,6 +59,9 @@ const supabase = createClient(
 
 // Función para enviar mail con Brevo API
 async function sendBrevoEmail({ to, subject, html }) {
+    if (!process.env.BREVO_API_KEY || !process.env.BREVO_SENDER) {
+        throw new Error('Backend sin configurar para enviar correos (BREVO_API_KEY/BREVO_SENDER)');
+    }
     const controller = new AbortController();
     const timeoutMs = 10_000;
     const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
